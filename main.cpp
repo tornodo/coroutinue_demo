@@ -18,27 +18,32 @@ void async_call(std::function<void()> call) {
     }).detach();
 }
 
-Future<int> call_async() {
+Future<int> call_async(int c) {
     Awaitable<int> await;
     State<int>* state = await.state_.get();
-
     spdlog::info("call_async begin");
-    async_call([state]() {
-        spdlog::info("callback finished");
-        state->SetValue(666);
+    async_call([state, c]() {
+        std::this_thread::sleep_for(std::chrono::seconds(5));
+        spdlog::info("call_async callback finished");
+        state->SetValue(666 + c);
         Scheduler* scheduler = state->GetScheduler();
         scheduler->AddState(state);
     });
     spdlog::info("call_async end");
-
     return await.GetFuture();
+}
+
+Future<int> call_before() {
+    co_return 111;
 }
 
 Future<void> call() {
     Scheduler* scheduler = SchedulerManager::GetInstance()->GetThreadScheduler(std::this_thread::get_id());
     spdlog::info("call begin");
-    auto res = co_await call_async();
-    spdlog::info("call() = {0:d}", res);
+    auto c = co_await call_before();
+    spdlog::info("call_before() = {0:d}", c);
+    auto res = co_await call_async(c);
+    spdlog::info("call_async() = {0:d}", res);
     co_await scheduler->Quit();
     co_return;
 }

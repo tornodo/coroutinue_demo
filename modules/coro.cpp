@@ -52,10 +52,8 @@ public:
     }
 
     void Resume() {
-        ready_ = true;
         auto handle = handle_;
         handle_ = nullptr;
-
         if (handle) {
             handle.resume();
         }
@@ -64,6 +62,7 @@ public:
     template <typename U>
     void SetValue(U&& u) {
         value_.store(std::move(u));
+        ready_ = true;
     }
 
     auto GetValue() {
@@ -88,8 +87,12 @@ private:
 export template <>
 class State<void>: public State_base_t  {
 public:
-    State() = default;
+    // State() = default;
+    State() {
+        SPDLOG_INFO("State<void>() 0X{0:x}", (uintptr_t)this);
+    }
     ~State() {
+        SPDLOG_INFO("~State<void>() 0X{0:x}", (uintptr_t)this);
     }
 
     void SetSuspendHandle(std::experimental::coroutine_handle<> handle) {
@@ -97,16 +100,15 @@ public:
     }
 
     void Resume() {
-        ready_ = true;
         auto handle = handle_;
         handle_ = nullptr;
-
         if (handle) {
             handle.resume();
         }
     }
 
     void SetValue() {
+        ready_ = true;
     }
 
     auto GetValue() {
@@ -130,20 +132,16 @@ export template <typename T>
 class PromiseBase {
 public:
     using value_type = T;
-    // using future_type = Future<T>;
     using state_type = State<T>;
     using promise_type = Promise<T>;
 
     PromiseBase() noexcept = default;
+    virtual ~PromiseBase() { }
     PromiseBase(PromiseBase&&) = default;
     PromiseBase& operator= (PromiseBase&&) = default;
 
     PromiseBase(const PromiseBase&) = delete;
     PromiseBase& operator= (const PromiseBase&) = delete;
-
-    // future_type GetFuture() {
-    //     return future_type(state_);
-    // }
 
     auto GetState() {
         return state_.get();
@@ -154,14 +152,9 @@ public:
         return state_;
     }
 
-    // future_type get_return_object() {
-    //     std::cout << "get_return_object" << std::endl;
-    //     return future_type(state_);
-    // }
-
-    auto initial_suspend() const {
+    auto initial_suspend() noexcept {
         SPDLOG_INFO("PromiseBase initial_suspend");
-        return std::experimental::suspend_always{};
+        return std::experimental::suspend_never{};
     }
 
     auto final_suspend() noexcept {
@@ -178,10 +171,20 @@ protected:
 };
 
 export template <typename T>
-class Promise : public PromiseBase<T> {
+class Promise final : public PromiseBase<T> {
 public:
     using value_type = T;
     using PromiseBase<T>::get_return_object;
+
+    Promise() {
+        SPDLOG_INFO("Promise() 0X{0:x}", (uintptr_t)this);
+    }
+    ~Promise() {
+        SPDLOG_INFO("~Promise() 0X{0:x}", (uintptr_t)this);
+    }
+    Promise(Promise&&) {
+        SPDLOG_INFO("Promise(Promise&&) 0X{0:x}", (uintptr_t)this);
+    }
 
     template<class U>
     void return_value(U&& u) {
@@ -191,53 +194,31 @@ public:
 };
 
 export template <>
-class Promise<void> {
+class Promise<void> final : public PromiseBase<void> {
 public:
-    // using future_type = Future<void>;
     using state_type = State<void>;
+    using PromiseBase<void>::get_return_object;
 
-    Promise() noexcept = default;
-    Promise(Promise&&) = default;
+    // Promise() noexcept = default;
+    Promise() {
+        SPDLOG_INFO("Promise<void>() 0X{0:x}", (uintptr_t)this);
+    }
+    ~Promise() {
+        SPDLOG_INFO("~Promise<void>() 0X{0:x}", (uintptr_t)this);
+    }
+    Promise(Promise&&) {
+        SPDLOG_INFO("Promise<void>(Promise&&) 0X{0:x}", (uintptr_t)this);
+    }
+    // Promise(Promise&&) = default;
     Promise& operator= (Promise&&) = default;
 
     Promise(const Promise&) = delete;
     Promise& operator= (const Promise&) = delete;
 
-    // future_type GetFuture() {
-    //     return future_type(state_);
-    // }
-
-    // future_type get_return_object() {
-    //     std::cout << "Promise<void> get_return_object" << std::endl;
-    //     return future_type(state_);
-    // }
-
-    auto get_return_object() {
-        SPDLOG_INFO("Promise<void> get_return_object");
-        return state_;
-    }
-
-    auto initial_suspend() const {
-        SPDLOG_INFO("Promise<void> initial_suspend");
-        return std::experimental::suspend_never{};
-    }
-
-    auto final_suspend() const noexcept {
-        SPDLOG_INFO("Promise<void> final_suspend");
-        return std::experimental::suspend_never{};
-    }
-
     void return_void() {
         SPDLOG_INFO("Promise<void> return_void");
         state_->SetValue();
     }
-
-    void unhandled_exception() {
-        std::terminate();
-    }
-
-protected:
-    std::shared_ptr<state_type> state_ = std::make_shared<state_type>();
 };
 
 export template <typename T>
